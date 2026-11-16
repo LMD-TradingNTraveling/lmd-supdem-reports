@@ -118,7 +118,7 @@ function lmdFeeAudit(){
  if(lmdFeeCache&&lmdFeeCache.trades===TRADES&&lmdFeeCache.cash===CASH)return lmdFeeCache;
  const feeTypes=new Set(['Exchange Fee','Clearing Fee','Nfa Fee','Commission']);
  const execs=new Map(),perTrade=new Map();
- const stampMs=v=>{const x=lmdStamp(v);const ms=Date.parse(x);return Number.isFinite(ms)?ms:NaN;};
+ const stampMs=v=>{const x=lmdStamp(v);const ms=Date.parse(x+'Z');return Number.isFinite(ms)?ms:NaN;};
  for(const t of TRADES){
    perTrade.set(String(t.id),0);
    for(const stamp of [t.entry,t.exit]){
