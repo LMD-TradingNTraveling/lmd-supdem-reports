@@ -240,7 +240,7 @@ function calendar(a){
  }
 }
 function heatmap(a){let rows=['<thead><tr><th>ET</th>'+['Mon','Tue','Wed','Thu','Fri'].map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody>'];let by=group(a,t=>String((t.day.getDay()+6)%7)+'|'+t.entry.slice(11,16).slice(0,3)+(Number(t.entry.slice(14,16))>=30?'30':'00'));let map=new Map(by);for(let h=18;h<42;h++)for(let m of [0,30]){let hour=h%24,slot=String(hour).padStart(2,'0')+':'+String(m).padStart(2,'0');rows.push(`<tr><th>${slot}</th>`);for(let day=0;day<5;day++){let x=map.get(day+'|'+slot)||[],n=stats(x).net;rows.push(`<td class="${!x.length?'zero':n>=0?'up':'down'}"><b>${x.length?signed(n):'—'}</b>${x.filter(t=>t.net>0).length}W / ${x.filter(t=>t.net<0).length}L</td>`)}rows.push('</tr>')}rows.push('</tbody>');$('heat').innerHTML=rows.join('')}
-function ledger(a){$('ledgerTable').innerHTML='<thead><tr><th>Futures Date</th><th>Entry (ET)</th><th>Exit (ET)</th><th>Pair ID</th><th>Contract</th><th>Side</th><th>Qty</th><th>Gross P&L</th><th>After Configured Fees</th></tr></thead><tbody>'+a.map(t=>`<tr><td>${iso(t.day)}</td><td>${t.entry.replace('T',' ')}</td><td>${t.exit.replace('T',' ')}</td><td>${esc(t.id)}</td><td>${esc(t.contract)}</td><td>${t.side}</td><td>${t.qty}</td><td>${signed(t.pnl)}</td><td class="${t.net>=0?'positive':'negative'}">${signed(t.net)}</td></tr>`).join('')+'</tbody>'}
+function ledger(a){$('ledgerTable').innerHTML='<thead><tr><th>Futures Date</th><th>Entry (ET)</th><th>Exit (ET)</th><th>Pair ID</th><th>Contract</th><th>Side</th><th>Qty</th><th>Gross P&L</th><th>After Configured Fees</th><th>MAE (pts / R)</th><th>MFE (pts / R)</th></tr></thead><tbody>'+a.map(t=>`<tr><td>${iso(t.day)}</td><td>${t.entry.replace('T',' ')}</td><td>${t.exit.replace('T',' ')}</td><td>${esc(t.id)}</td><td>${esc(t.contract)}</td><td>${t.side}</td><td>${t.qty}</td><td>${signed(t.pnl)}</td><td class="${t.net>=0?'positive':'negative'}">${signed(t.net)}</td><td>${lmdExcursion(t,'mae')}</td><td>${lmdExcursion(t,'mfe')}</td></tr>`).join('')+'</tbody>'}
 $('export').onclick=()=>{let a=selected(),header=['FuturesDate','EntryET','ExitET','PairID','Account','Contract','Side','Qty','GrossPL','AfterFeesPL'];let csv=[header.join(','),...a.map(t=>[iso(t.day),t.entry,t.exit,t.id,t.account,t.contract,t.side,t.qty,t.pnl,t.net].join(','))].join('\r\n');let u=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));let l=document.createElement('a');l.href=u;l.download='LMD_Tradovate_Filtered.csv';l.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
 for(const account of [...new Set(TRADES.map(t=>t.account))])$('account').insertAdjacentHTML('beforeend',`<option value="${esc(account)}">${esc(account)}</option>`);
 for(let y=2024;y<=new Date().getFullYear()+1;y++)$('calYear').insertAdjacentHTML('beforeend',`<option value="${y}">${y}</option>`);$('calYear').value='2026';for(let m=0;m<12;m++)$('calMonth').insertAdjacentHTML('beforeend',`<option value="${m}">${new Date(2026,m,1).toLocaleString('en-US',{month:'long'})}</option>`);$('calMonth').value='10';for(const id of ['calYear','calView','calMonth'])$(id).addEventListener('change',()=>calendar(selected()));$('calCurrent').onclick=()=>{const now=new Date();$('calYear').value=now.getFullYear();$('calMonth').value=now.getMonth();$('calView').value='month';calendar(selected())};$('calFull').onclick=()=>{$('calView').value='year';calendar(selected())};
@@ -476,7 +476,7 @@ function reportContent(tab){const a=reportState.rows,st=stats(a),wins=a.filter(t
  if(tab===7)return heading+reportResearchManagement()+`<h4>Research and DLL commentary</h4><p class="report-note">DLL triggers and live stop-hunt outcomes require separate verification. Enter reviewed notes below.</p><label>Research / DLL notes for this report<textarea id="reportResearchNotes" rows="7" style="width:100%;padding:10px" placeholder="Add manually verified research and DLL observations here...">${esc(reportState.notes||'')}</textarea></label>`;
  return heading+reportTradeTable(a);
 }
-function reportTradeTable(a){return reportTable(['Futures Day','Entry (ET)','Exit (ET)','Contract','Side','Qty','Net P&L'],a.map(t=>[iso(t.day),esc(t.entry.replace('T',' ')),esc(t.exit.replace('T',' ')),esc(t.contract),esc(t.side),t.qty,money(t.net)]));}
+function reportTradeTable(a){return reportTable(['Futures Day','Entry (ET)','Exit (ET)','Contract','Side','Qty','Net P&L','MAE (pts / R)','MFE (pts / R)'],a.map(t=>[iso(t.day),esc(t.entry.replace('T',' ')),esc(t.exit.replace('T',' ')),esc(t.contract),esc(t.side),t.qty,money(t.net),lmdExcursion(t,'mae'),lmdExcursion(t,'mfe')]));}
 function reportDraw(){const tabs=$('reportTabs');tabs.innerHTML=REPORT_TABS.map((t,i)=>`<button type="button" data-rt="${i}" class="${i===reportState.tab?'active':''}">${t}</button>`).join('');$('reportBody').innerHTML='<div class="report-card">'+reportContent(reportState.tab)+'</div>';tabs.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{if($('reportResearchNotes'))reportState.notes=$('reportResearchNotes').value;reportState.tab=Number(b.dataset.rt);reportDraw()}));$('reportBody').querySelectorAll('[data-chart]').forEach(el=>el.addEventListener('change',ev=>{const file=ev.target.files[0];if(!file||!file.type.startsWith('image/'))return;const reader=new FileReader();reader.onload=()=>{reportState.charts[el.dataset.chart]=reader.result;reportDraw()};reader.readAsDataURL(file)}));}
 function generateReport(){const r=reportRange();reportState={...reportState,...r,rows:reportRows(r.start,r.end),tab:0,charts:{},notes:''};$('reportRange').textContent=`${r.type.toUpperCase()} · ${iso(r.start)} through ${iso(new Date(r.end.getFullYear(),r.end.getMonth(),r.end.getDate()-1))} · ${reportState.rows.length} live trades · Eastern futures trading days`;reportDraw();}
 function exportReport(){if($('reportResearchNotes'))reportState.notes=$('reportResearchNotes').value;const title=`LMD ${reportState.type} Report ${iso(reportState.start)}`;const sections=REPORT_TABS.map((tab,i)=>`<section class="report-card"><h2>${esc(tab)}</h2>${reportContent(i)}</section>`).join('');const styles=[...document.querySelectorAll('style')].map(x=>x.textContent).join('\n');const output=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${styles}</style></head><body><main style="max-width:1200px;margin:25px auto;padding:20px"><h1>${esc(title)}</h1><p>Live Tradovate Position History only · Eastern futures days · ${reportState.rows.length} trades</p>${sections}</main></body></html>`;const blob=new Blob([output],{type:'text/html;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`LMD_${reportState.type}_${iso(reportState.start)}.html`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -786,4 +786,59 @@ async function lmdLoadPublishedData(){
  }
 }
 lmdLoadPublishedData();
-</script></body></html>
+</script>
+<script>
+/* Supplemental research integration. NEVER writes to TRADES/CASH, lmdNet or live performance metrics. */
+const LMD_RESEARCH={live:[],matched:new Map(),status:{}};
+const lmdRNum=v=>{if(v===null||v===undefined||String(v).trim()==='')return NaN;const n=Number(v);return Number.isFinite(n)?n:NaN};
+function lmdResearchClock(s){return Date.parse(String(s).replace(' ','T')+'-05:00')}
+function lmdContractMonth(s){const v=String(s).toUpperCase().replace(/\s/g,'');const m=v.match(/MNQ\s*(\d{2})-(\d{2})/);return m?m[2]+'-'+m[1]:null}
+function lmdResearchMatch(){
+ LMD_RESEARCH.matched.clear();const candidates=[];
+ for(const t of TRADES){
+  const entry=t.side==='Long'?t.buy:t.sell;
+  for(let j=0;j<LMD_RESEARCH.live.length;j++){
+   const r=LMD_RESEARCH.live[j];if(String(r.Direction).toLowerCase()!==t.side.toLowerCase())continue;
+   if(!String(r.Instrument).toUpperCase().includes('MNQ')||t.product!=='MNQ')continue;
+   if(Number(r.Qty)!==Number(t.qty))continue;
+   // Research logger timestamps are Eastern wall time; published Tradovate is also Eastern wall time.
+   const rt=Date.parse(r.EntryTime.replace(' ','T')+'Z');const tt=Date.parse(t.entry+'Z');
+   const gap=Math.abs(rt-tt)/60000;const points=Math.abs(Number(r.EntryPrice)-entry);
+   if(gap<=3&&points<=8)candidates.push({id:t.id,j,gap,points});
+  }
+ }
+ // Only one-to-one candidates with unique partners qualify; ambiguous cases remain blank.
+ const countT=new Map(),countR=new Map();for(const c of candidates){countT.set(c.id,(countT.get(c.id)||0)+1);countR.set(c.j,(countR.get(c.j)||0)+1)}
+ for(const c of candidates)if(countT.get(c.id)===1&&countR.get(c.j)===1)LMD_RESEARCH.matched.set(String(c.id),LMD_RESEARCH.live[c.j]);
+}
+function lmdExcursion(t,which){const r=LMD_RESEARCH.matched.get(String(t.id));if(!r)return '—';
+ const points=lmdRNum(r[which==='mae'?'MaxMAEPoints':'MaxMFEPoints']);const multiple=lmdRNum(r[which==='mae'?'MaxMAER':'MaxMFER']);
+ return Number.isFinite(points)&&Number.isFinite(multiple)?`${points.toFixed(2)} / ${multiple.toFixed(2)}R`:'—';}
+async function lmdLoadResearch(){
+ const files={live:'live_ats',active:'active_ytd',unrestricted:'unrestricted_ytd'};
+ for(const [kind,file] of Object.entries(files)){
+  try{const resp=await fetch('data/research/'+file+'.json?v='+Date.now(),{cache:'no-store'});if(!resp.ok)throw Error('HTTP '+resp.status);
+   const data=await resp.json();if(data.schema!==1||data.domain!=='ATS_RESEARCH_ONLY'||data.kind!==kind||!Array.isArray(data.trades))throw Error('Invalid research schema');
+   LMD_RESEARCH.status[kind]=`${data.trades.length} records`;
+   if(kind==='live'){LMD_RESEARCH.live=data.trades;lmdResearchMatch();}
+   else{
+    // Refresh existing Research Center arrays without altering its layout or performance calculations.
+    const arr=rsAll[kind];arr.length=0;
+    for(const r of data.trades){const d=rsDate(r.EntryTime);if(!d)continue;
+     arr.push({id:r.TradeID,date:d,day:rsFut(d),side:String(r.Direction).toLowerCase(),p:lmdRNum(r.RealizedPnL),comm:0,
+       mae:lmdRNum(r.MaxMAEPoints),mfe:lmdRNum(r.MaxMFEPoints),bars:lmdRNum(r.BarsHeld),qty:lmdRNum(r.Qty),entry:lmdRNum(r.EntryPrice),exit:lmdRNum(r.ExitPrice),label:r.EntryLabel||'',raw:r});}
+    // Retain original RS_RAW columns and RS_COL indexes for the existing Research Center.
+    const map={'Trade number':'TradeID','Instrument':'Instrument','Account':'Account','Strategy':'Strategy','Market pos.':'Direction','Qty':'Qty','Entry price':'EntryPrice','Exit price':'ExitPrice','Entry time':'EntryTime','Exit time':'ExitTime','Entry name':'EntryLabel','Exit name':'ExitReason','Profit':'RealizedPnL','Cum. net profit':'RealizedPnL','Commission':null,'MAE':'MaxMAEPoints','MFE':'MaxMFEPoints','ETD':null,'Bars':'BarsHeld'};
+    RS_RAW[kind].rows=data.trades.map(r=>RS_RAW[kind].columns.map(c=>map[c]===null?'':(r[map[c]]??'')));
+
+   }
+  }catch(e){LMD_RESEARCH.status[kind]='Not published ('+e.message+')';}
+ }
+ const target=document.querySelector('#research .panel h2');if(target){const note=document.createElement('p');note.className='note';note.textContent='Published research feeds: '+Object.entries(LMD_RESEARCH.status).map(([k,v])=>k+': '+v).join(' · ')+'. Research never contributes to Tradovate live P&L.';target.after(note)}
+ try{render();}catch(e){console.warn('Research ledger refresh:',e)}
+ try{if(typeof rsRender==='function')rsRender();}catch(e){console.warn('Research center refresh:',e)}
+ try{if(typeof reportDraw==='function')reportDraw();}catch(e){console.warn('Report refresh:',e)}
+}
+window.addEventListener('load',()=>setTimeout(lmdLoadResearch,200));
+</script>
+</body></html>
