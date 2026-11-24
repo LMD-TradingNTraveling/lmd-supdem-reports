@@ -798,6 +798,7 @@ async function lmdLoadPublishedData(){
    if(payload.trades.length<embeddedCount)throw Error('Published trade count smaller than embedded YTD baseline');
    TRADES=payload.trades;
    CASH=payload.cash;
+   if(typeof lmdResearchMatch==='function')lmdResearchMatch();
    const select=document.getElementById('account');
    const selected=select.value;
    select.innerHTML='<option value="all">All imported accounts</option>';
@@ -823,22 +824,35 @@ const lmdRNum=v=>{if(v===null||v===undefined||String(v).trim()==='')return NaN;c
 function lmdResearchClock(s){return Date.parse(String(s).replace(' ','T')+'-05:00')}
 function lmdContractMonth(s){const v=String(s).toUpperCase().replace(/\s/g,'');const m=v.match(/MNQ\s*(\d{2})-(\d{2})/);return m?m[2]+'-'+m[1]:null}
 function lmdResearchMatch(){
- LMD_RESEARCH.matched.clear();const candidates=[];
+ LMD_RESEARCH.matched.clear();
+ const candidates=[], byTrade=new Map(), byResearch=new Map();
+ const clock=s=>Date.parse(String(s).replace(' ','T')+'Z');
  for(const t of TRADES){
-  const entry=t.side==='Long'?t.buy:t.sell;
+  const entry=t.side==='Long'?t.buy:t.sell, exit=t.side==='Long'?t.sell:t.buy;
   for(let j=0;j<LMD_RESEARCH.live.length;j++){
-   const r=LMD_RESEARCH.live[j];if(String(r.Direction).toLowerCase()!==t.side.toLowerCase())continue;
-   if(!String(r.Instrument).toUpperCase().includes('MNQ')||t.product!=='MNQ')continue;
-   if(Number(r.Qty)!==Number(t.qty))continue;
-   // Research logger timestamps are Eastern wall time; published Tradovate is also Eastern wall time.
-   const rt=Date.parse(r.EntryTime.replace(' ','T')+'Z');const tt=Date.parse(t.entry+'Z');
-   const gap=Math.abs(rt-tt)/60000;const points=Math.abs(Number(r.EntryPrice)-entry);
-   if(gap<=3&&points<=8)candidates.push({id:t.id,j,gap,points});
+   const r=LMD_RESEARCH.live[j];
+   if(String(r.Direction).toLowerCase()!==t.side.toLowerCase()||t.product!=='MNQ'||!/^MNQ\b/i.test(String(r.Instrument)))continue;
+   const expiry=lmdContractMonth(r.Instrument), cm=String(t.contract).match(/^MNQ([HMUZ])(\d{1,2})$/i);
+   if(!expiry||!cm||Number(expiry.slice(0,2))%10!==Number(cm[2])%10||Number(expiry.slice(3))!==({H:3,M:6,U:9,Z:12})[cm[1].toUpperCase()])continue;
+   const qty=Number(t.qty), rq=Number(r.Qty);
+   if(!Number.isInteger(qty)||qty<=0||qty>rq||!Number.isInteger(rq))continue;
+   const gap=Math.abs(clock(r.EntryTime)-clock(t.entry))/60000;
+   const endGap=Math.abs(clock(r.ExitTime)-clock(t.exit))/60000;
+   const points=Math.abs(Number(r.EntryPrice)-entry), endPoints=Math.abs(Number(r.ExitPrice)-exit);
+   if(!(gap<=3&&points<=8&&endGap<=3&&endPoints<=8))continue;
+   const c={t,j,qty};candidates.push(c);
+   if(!byTrade.has(t.id))byTrade.set(t.id,[]);byTrade.get(t.id).push(c);
+   if(!byResearch.has(j))byResearch.set(j,[]);byResearch.get(j).push(c);
   }
  }
- // Only one-to-one candidates with unique partners qualify; ambiguous cases remain blank.
- const countT=new Map(),countR=new Map();for(const c of candidates){countT.set(c.id,(countT.get(c.id)||0)+1);countR.set(c.j,(countR.get(c.j)||0)+1)}
- for(const c of candidates)if(countT.get(c.id)===1&&countR.get(c.j)===1)LMD_RESEARCH.matched.set(String(c.id),LMD_RESEARCH.live[c.j]);
+ // Accept the entire unique group only; never guess a subset or cross accounts.
+ for(const [j,group] of byResearch){
+  const r=LMD_RESEARCH.live[j], first=group[0].t;
+  if(group.some(c=>byTrade.get(c.t.id).length!==1||c.t.account!==first.account||c.t.contract!==first.contract))continue;
+  if(group.reduce((n,c)=>n+c.qty,0)!==Number(r.Qty))continue;
+  if(group.length>1&&group.some(c=>c.t.entry!==first.entry||c.t.exit!==first.exit))continue;
+  for(const c of group)LMD_RESEARCH.matched.set(String(c.t.id),r);
+ }
 }
 function lmdExcursion(t,which){const r=LMD_RESEARCH.matched.get(String(t.id));if(!r)return '—';
  const points=lmdRNum(r[which==='mae'?'MaxMAEPoints':'MaxMFEPoints']);const multiple=lmdRNum(r[which==='mae'?'MaxMAER':'MaxMFER']);
