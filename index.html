@@ -252,7 +252,7 @@ const REPORT_TABS=['Overview','Calendar','Heatmap','Trade Profiles','Research De
 let reportState={type:'weekly',start:null,end:null,rows:[],tab:0,charts:{}};
 function reportRange(){const type=$('reportType').value,raw=$('reportDate').value||'2026-11-13';const d=new Date(raw+'T12:00:00');let start,end;
  if(type==='daily'){start=new Date(d.getFullYear(),d.getMonth(),d.getDate());end=new Date(start.getFullYear(),start.getMonth(),start.getDate()+1)}
- else if(type==='weekly'){start=monday(d);end=new Date(start.getFullYear(),start.getMonth(),start.getDate()+7)}
+ else if(type==='weekly'){const m=monday(d);start=new Date(m.getFullYear(),m.getMonth(),m.getDate());end=new Date(start.getFullYear(),start.getMonth(),start.getDate()+7)}
  else{start=new Date(d.getFullYear(),d.getMonth(),1);end=new Date(d.getFullYear(),d.getMonth()+1,1)}
  return {type,start,end};}
 function reportRows(start,end){const acct=$('account').value,fee=Number($('fee').value)||0;return TRADES.filter(t=>(acct==='all'||t.account===acct)).map(t=>({...t,net:lmdNet(t),day:dateOf(t)})).filter(t=>t.day>=start&&t.day<end).sort((a,b)=>a.exit.localeCompare(b.exit));}
